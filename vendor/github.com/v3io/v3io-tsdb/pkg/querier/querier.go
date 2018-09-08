@@ -155,6 +155,42 @@ func (q *V3ioQuerier) queryNumericPartition(
 
 // return the current metric names
 func (q *V3ioQuerier) LabelValues(labelKey string) ([]string, error) {
+	if labelKey == "__name__" {
+		return q.getMetricNames()
+	} else {
+		return q.getLabelValues(labelKey)
+	}
+}
+
+func (q *V3ioQuerier) Close() error {
+	return nil
+}
+
+func (q *V3ioQuerier) getMetricNames() ([]string, error) {
+	input := v3io.GetItemsInput{
+		Path: q.cfg.Path + "/names/",
+		AttributeNames: []string{"__name"},
+	}
+
+	iter, err := utils.NewAsyncItemsCursor(q.container, &input, q.cfg.QryWorkers, []string{}, q.logger)
+	if err != nil {
+		return nil, err
+	}
+
+	var metricNames []string
+
+	for iter.Next() {
+		metricNames = append(metricNames, iter.GetField("__name").(string))
+	}
+
+	if iter.Err() != nil {
+		q.logger.InfoWith("Failed to read metric names, returning empty list", "err", iter.Err().Error())
+	}
+
+	return metricNames, nil
+}
+
+func (q *V3ioQuerier) getLabelValues(labelKey string) ([]string, error) {
 
 	// sync partition manager (hack)
 	err := q.partitionMngr.ReadAndUpdateSchema()
@@ -211,8 +247,4 @@ func (q *V3ioQuerier) LabelValues(labelKey string) ([]string, error) {
 	}
 
 	return labelValues, nil
-}
-
-func (q *V3ioQuerier) Close() error {
-	return nil
 }
